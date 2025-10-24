@@ -287,6 +287,11 @@ int main() {
   while (body.length() != 0) {
     // split by line
     int pos = body.find('\n');
+
+    if (pos == std::string::npos) {
+      break;
+    }
+
     auto stud = Student::parse(body.substr(0, pos));
 
     if (stud) {
