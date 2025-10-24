@@ -344,7 +344,7 @@ int main() {
   std::cout << "Started iterating over students\n";
   for (auto stud : students) {
     std::cout << "Unique student " << stud.to_string() << "\n";
-    data.append(stud.to_string());
+    data.append(stud.to_string() + "\n");
   }
   std::cout << "Ended iterating over students\n";
 
