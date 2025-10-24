@@ -1,0 +1,6 @@
+.cache
+other
+main
+*.o
+zmq-server/student_file1.txt
+zmq-server/student_file2.txt
