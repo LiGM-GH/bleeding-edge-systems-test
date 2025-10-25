@@ -4,10 +4,12 @@
   - [x] Parse the format from textfiles
   - [x] Merge the students
   - [x] Send the result
-- [ ] Client
-  - [ ] Receive the clients
-  - [ ] Sort the clients
-  - [ ] View the clients
+- [x] Client
+  - [x] Receive the clients
+  - [x] Sort the clients
+  - [x] View the clients
+  - [x] Implement GUI
+  - [x] Implement threading
 
 # Task2 - coords-search
 

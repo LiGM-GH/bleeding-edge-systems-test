@@ -1,17 +1,7 @@
-cflags := "-Wall -Wextra -Wpedantic"
-main := "main"
-main_cpp := main + ".cpp"
-main_obj := main + ".o"
-main_exe := main
-
-all_cpp := main_cpp
-all_obj := main_obj
-all_libflags := "-lzmq"
-
 # Run the client
-default: build-server
-    ./main
+default: build-client
+    ./zmq-client
 
-build-server:
-    g++ {{cflags}} -c {{main_cpp}}
-    g++ {{cflags}} {{all_obj}} -o {{main_exe}} {{all_libflags}}
+build-client:
+    /usr/bin/cmake .
+    /usr/bin/make
