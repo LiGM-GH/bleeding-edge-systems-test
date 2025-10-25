@@ -1,18 +1,18 @@
-#include <array>
-#include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <optional>
-#include <set>
 #include <string>
-#include <thread>
 
+#include <boost/thread.hpp>
+#include <thread>
 #include <unordered_set>
 #include <zmq.h>
 #include <zmq.hpp>
 
 #define STUDLINE_MAX_LENGTH 100
+#define THREAD_NUM 8
 
 class Student {
   std::string name = std::string{};
@@ -40,13 +40,13 @@ public:
     };
 
     // SKIP THE FIRST ELEMENT START ----------------------------------------- //
-    for (; i < STUDLINE_MAX_LENGTH && line[i] != 0 && line[i] != ' '; i++) { //
-    } //
-    if (line[i] == 0) {            //
-      std::cerr << "Line ended\n"; //
-      return std::nullopt;         //
-    } //
-    i_prev = ++i; //
+    for (; i < STUDLINE_MAX_LENGTH && line[i] != 0 && line[i] != ' '; i++) {
+    }
+    if (line[i] == 0) {
+      std::cerr << "Line ended\n";
+      return std::nullopt;
+    }
+    i_prev = ++i;
     // SKIP THE FIRST ELEMENT END ------------------------------------------- //
 
     for (; i < STUDLINE_MAX_LENGTH && line[i] != 0 && line[i] != ' '; i++) {
@@ -284,21 +284,39 @@ public:
   }
 };
 
-int main() {
-  using namespace std::chrono_literals;
+void handle_request(zmq::context_t &context, std::string data) {
+  zmq::socket_t socket{context, zmq::socket_type::rep};
+  socket.connect("inproc://workers");
+  zmq::message_t request;
 
+  while (true) {
+    std::cerr << "Entering the handle_request\n";
+
+    // receive a request from client
+    socket.recv(request, zmq::recv_flags::none);
+
+    std::cout << "Received " << request.to_string() << std::endl;
+
+    // send the reply to the client
+    socket.send(zmq::buffer(data), zmq::send_flags::none);
+  }
+}
+
+std::optional<std::string> count_students() {
   std::string_view fname1 = "student_file1.txt";
   std::string_view fname2 = "student_file2.txt";
 
   std::ifstream if1(fname1.data());
+
   if (!if1.is_open()) {
     std::cerr << "Couldn't open " << fname1 << "\n";
-    return -1;
+    return std::nullopt;
   }
+
   std::ifstream if2(fname2.data());
   if (!if2.is_open()) {
     std::cerr << "Couldn't open " << fname2 << "\n";
-    return -1;
+    return std::nullopt;
   }
 
   std::unordered_set<Student, Student::HashFunction> students;
@@ -331,13 +349,6 @@ int main() {
     students.insert(student.value());
   }
 
-  // initialize the zmq context with a single IO thread
-  zmq::context_t context{1};
-
-  // construct a REP (reply) socket and bind to interface
-  zmq::socket_t socket{context, zmq::socket_type::rep};
-  socket.bind("tcp://127.0.0.1:5152");
-
   // prepare some static data for responses
   std::string data;
 
@@ -348,16 +359,37 @@ int main() {
   }
   std::cout << "Ended iterating over students\n";
 
-  for (;;) {
-    zmq::message_t request;
+  return data;
+}
 
-    // receive a request from client
-    socket.recv(request, zmq::recv_flags::none);
-    std::cout << "Received " << request.to_string() << std::endl;
+int main() {
+  std::string data;
+  auto data_opt = count_students();
 
-    // send the reply to the client
-    socket.send(zmq::buffer(data), zmq::send_flags::none);
+  if (!data_opt) {
+    return -1;
   }
+
+  data = data_opt.value();
+
+  // initialize the zmq context with a single IO thread
+  zmq::context_t context{THREAD_NUM};
+
+  std::vector<std::thread> threads(THREAD_NUM);
+
+  zmq::socket_t clients(context, zmq::socket_type::router);
+  clients.bind("tcp://127.0.0.1:5152");
+  zmq::socket_t workers(context, zmq::socket_type::dealer);
+
+  workers.bind("inproc://workers");
+
+  auto handler_fn = [&data, &context]() { handle_request(context, data); };
+
+  for (int i = 0; i < THREAD_NUM; i++) {
+    threads.push_back(std::thread(handler_fn));
+  }
+
+  zmq::proxy(clients, workers);
 
   return 0;
 }

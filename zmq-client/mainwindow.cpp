@@ -1,7 +1,10 @@
 #include "mainwindow.h"
 #include "./client_main.h"
 #include "./ui_mainwindow.h"
+#include <exception>
+#include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -22,7 +25,15 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::run_client() {
-  std::set<std::optional<Student>> studs_set = client_main();
+  std::optional<std::set<std::optional<Student>>> studs_set_opt = client_main();
+
+  if (!studs_set_opt.has_value()) {
+    std::cerr << "Exiting the thread_func\n";
+    return;
+  }
+  std::cerr << "Proceeding with the result of non-emptiness: " << studs_set_opt.has_value() << "\n";
+
+  std::set<std::optional<Student>> studs_set = studs_set_opt.value();
   std::string studs;
   int errors = 0;
 

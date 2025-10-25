@@ -31,5 +31,5 @@ public:
   std::string to_string() const;
 };
 
-std::set<std::optional<Student>> client_main();
+std::optional<std::set<std::optional<Student>>> client_main();
 #endif // CLIENT_MAIN_H

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <optional>
 #include <set>
 #include <string>
 #include <zmq.hpp>
@@ -265,7 +266,7 @@ public:
   }
 };
 
-std::set<std::optional<Student>> client_main() {
+std::optional<std::set<std::optional<Student>>> client_main() {
   zmq::context_t context(1);
   zmq::socket_t socket(context, zmq::socket_type::req);
 
@@ -275,10 +276,27 @@ std::set<std::optional<Student>> client_main() {
   zmq::message_t request(5);
   memcpy(request.data(), "Hello", 5);
   std::cout << "Sending request\n";
-  socket.send(request, zmq::send_flags::none);
+  socket.set(zmq::sockopt::connect_timeout, 5);
+  socket.set(zmq::sockopt::heartbeat_timeout, 5);
+  socket.set(zmq::sockopt::rcvtimeo, 5);
+
+  auto send_result = socket.send(request, zmq::send_flags::none);
+
+  if (!send_result.has_value()) {
+    std::cerr << "Couldn't send the request\n";
+    socket.set(zmq::sockopt::linger, 0);
+    return std::nullopt;
+    std::cerr << "The return didn't work out\n";
+  }
 
   zmq::message_t reply;
-  socket.recv(reply, zmq::recv_flags::none);
+  auto result = socket.recv(reply, zmq::recv_flags::none);
+  if (!result.has_value()) {
+    std::cerr << "Couldn't receive the result - returning nullopt\n";
+    socket.set(zmq::sockopt::linger, 0);
+    return std::nullopt;
+    std::cerr << "The return didn't work out\n";
+  }
   std::cout << "Received\n";
 
   std::string body = reply.to_string();
