@@ -22,3 +22,4 @@ zmq-client/not_zmq-client_autogen
 zmq-client/zmq-client
 zmq-client/zmq-client_autogen
 zmq-client/compile_commands.json
+task2/__pycache__
