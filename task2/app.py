@@ -1,6 +1,5 @@
 from asyncio import subprocess
 from http import HTTPStatus
-import io
 import os
 import re
 import tempfile
@@ -8,61 +7,77 @@ from quart import Quart
 import quart
 
 NAME = "ntc-task2"
-TEMP_PREFIX = NAME + "_"
+TEMP_PREFIX = "userfiles/" + NAME + "_"
 TEMP_SUFFIX = "-temp"
 
 
 def main():
     app = Quart(NAME)
 
-    regex_text = ""
-
-    with open("./regex-text.txt") as f:
-        regex_text = f.readline()
-
-    regex = re.compile(regex_text)
+    regex_obj = re.compile(
+        r"(-?[0-9]+\.[0-9]+\s+-?[0-9]+\.[0-9]+|[NS][0-9]+\.[0-9]+\s+[WE][0-9]+\.[0-9]+|[0-9]+-[0-9]+[NS]\s+[0-9]+-[0-9]+[WE]|[0-9]+[NS]\s+[0-9]+[WE]|[0-9]+[NS]\s+[0-9]+[WE]|[NS][0-9]+\s+[WE][0-9]+|[NS][0-9]+\s+[WE][0-9]+|[NS][0-9]+\s+[WE][0-9]+|[0-9][0-9]°[0-9][0-9]\.[0-9][0-9]'[NS]\s+[0-9][0-9]°[0-9][0-9]\.[0-9][0-9]'[WE]|[0-9][0-9]°[0-9][0-9]'[NS]\s+[0-9][0-9]°[0-9][0-9]'[WE]|[0-9][0-9]°[0-9][0-9]\.[0-9][0-9]'[NS]\s+[0-9][0-9]°[0-9][0-9]\.[0-9][0-9]'[WE]|[0-9][0-9]°[NS]\s+[0-9][0-9]°[WE]|[0-9][0-9]°[0-9][0-9]'[0-9]+\.[0-9]+''[NS]\s+[0-9][0-9]°[0-9][0-9]'[0-9]+\.[0-9]+''[WE]|[0-9][0-9]°[0-9][0-9]'[0-9]+''[NS]\s+[0-9][0-9]°[0-9][0-9]'[0-9]+''[WE]|[0-9][0-9]°[0-9][0-9]'[NS]\s+[0-9][0-9]°[0-9][0-9]'[WE]|[0-9][0-9]°[0-9][0-9](\.[0-9]+)?'\s*(с\.ш|ю\.ш|С|Ю)\.?\s+[0-9][0-9]°[0-9][0-9](\.[0-9]+)?'\s*(в\.д|з\.д|В|З)|[0-9][0-9]°[0-9][0-9]'[0-9][0-9]\.[0-9]+('')?\s*(с\.ш|ю\.ш|С|Ю)\.?\.?\s+[0-9][0-9]°[0-9][0-9]'[0-9][0-9]\.[0-9]+('')?\s*(в\.д|з\.д|В|З)|[0-9]+\.[0-9]+[NS]\s+[0-9]+\.[0-9]+[WE]|[0-9]+-[0-9][0-9]\.[0-9][0-9][NS]\s+[0-9]+-[0-9][0-9]\.[0-9][0-9][WE]|[0-9]+,[0-9]+°,\s+[0-9]+,[0-9]+°|N[0-9]+\.[0-9]+°,\s+E[0-9]+\.[0-9]+°)"
+    )
 
     @app.route("/")
     async def handle_root() -> quart.Response | list[dict[str, str]] | None:
         tempf = tempfile.NamedTemporaryFile(
             dir=".", delete=False, prefix=TEMP_PREFIX, suffix=TEMP_SUFFIX
         )
-        len = quart.request.content_length
 
-        if len is None:
-            return quart.Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+        try:
+            len = quart.request.content_length
 
-        stream = await quart.request.stream
-        for byte_line in stream:
-            tempf.write(byte_line)
+            if len is None:
+                return quart.Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
 
-        proc = await subprocess.create_subprocess_shell("./grep-for-coords.sh ")
+            async for byte_line in quart.request.body:
+                tempf.write(byte_line)
+            tempf.close()
 
-        outpipe = proc.stdout
-
-        if outpipe is None:
-            return
-
-        result: list[dict[str, str]] = []
-
-        str_result = str(outpipe.read())
-        for match in regex.finditer(str_result):
-            dictionary: dict[str, str] = {}
-
-            print(match)
-
-            dictionary["coord"] = str_result[match.span()[0] : match.span()[1]]
-
-            found = max(
-                str_result.find(".", match.span()[1]),
-                str_result.find("?", match.span()[1]),
-                str_result.find("!", match.span()[1]),
+            print(f"{tempf.name = }")
+            proc = await subprocess.create_subprocess_shell(
+                f"grep -Pso {tempf.name} -e $(cat ./regex-text.txt)",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
 
-            # if not found, found = -1; then found + 1 = 0
-            dictionary["sentence"] = str_result[found + 1].strip()[:200]
+            # proc_result = await proc.communicate()
+            # print(f"{proc_result = }")
+            # print(f"{proc.returncode = }")
 
-            result.append(dictionary)
+            outpipe, outerr = await proc.communicate()
+
+            # if outpipe is None:
+            #     print("COULDN'T GET OUTPUT")
+            #     return quart.Response(status=HTTPStatus.UNPROCESSABLE_ENTITY)
+
+            result: list[dict[str, str]] = []
+
+            print(f"{outpipe = }")
+            print(f"{outerr = }")
+
+            str_result = outpipe.decode().strip()
+
+            finds = regex_obj.finditer(str_result)
+            i = 0
+
+            for match in finds:
+                i += 1
+                dictionary: dict[str, str] = {}
+
+                print(match)
+
+                dictionary["coord"] = str_result[match.span()[0] : match.span()[1]]
+
+                dictionary["sentence"] = str_result[:200]
+
+                result.append(dictionary)
+
+            if i == 0:
+                print("NO FINDS")
+
+        finally:
+            os.remove(tempf.name)
 
         return result
 
